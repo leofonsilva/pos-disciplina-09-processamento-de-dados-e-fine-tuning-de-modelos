@@ -1,1 +1,7 @@
-# pos-disciplina-09-processamento-de-dados-e-fining-tuning-de-modelos
+# Pós Disciplina 09 - Processamento de Dados e Fine-Tuning de Modelos
+
+## Introdução
+Pendente...
+
+## Módulos
+Pendente...
