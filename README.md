@@ -73,3 +73,46 @@ node extraction-to-jsonl-tool.js
 node pii-scrubbing-gate-tool.js
 node dataset-cleaning-balancing-tool.js
 ```
+
+### Módulo 03: Fine-Tuning via API (upload e train)
+
+#### **Projeto:** [Amplitude Seguros - Vertex AI Fine-Tuning Pipeline](module-03)
+
+**Tecnologias utilizadas:**
+- **Vertex AI** - Plataforma gerenciada de fine-tuning do Google Cloud
+- **Gemini 2.5 Flash** - Modelo base utilizado para treinamento supervisionado
+- **JSONL** - Formato de dataset para upload e treinamento
+- **Google Cloud Storage** - Armazenamento de datasets em bucket
+- **IAM (Identity and Access Management)** - Controle de permissões para acesso ao bucket e jobs
+- **SHA-256** - Hash de conteúdo para versionamento de dataset
+- **Model Card** - Documentação estruturada de linhagem do modelo
+- **DPO (Direct Preference Optimization)** - Técnica de Preference Tuning para pares de respostas
+
+**Conceitos abordados:**
+- **Fine-Tuning Gerenciado:** Segunda decisão do pipeline (como treinar). Processo em cinco passos genéricos: converter dataset, fazer upload, configurar job, treinar, monitorar. O provedor gerencia infraestrutura, GPU e processo distribuído.
+- **Risco de Provedor:** Serviços self-service de fine-tuning podem ser descontinuados (OpenAI, Gemini API). Diligência de provedor é parte da arquitetura: disponibilidade futura, suporte ao modelo base, contrato e estratégia de saída.
+- **Conversão de Dataset:** Esquema canônico (instrução, entrada, saída, metadata) é adaptado para o formato do provedor (dois turnos: user e model). Instrução e entrada combinadas no turno do usuário; saída preservada como JSON exato no turno do modelo.
+- **Gate de Confiança de OCR:** Exemplos com confiança de OCR abaixo de um limiar (ex: 62%) são sinalizados para revisão humana em vez de irem automaticamente para treinamento. Confiança entre 94%-96% passa; ausência de métrica (dados sintéticos) é tratada como não aplicável.
+- **Escala do Pipeline:** Mesmo pipeline do módulo 2 (MinHash, LSH, balanceamento por temperatura, entropia de Shannon) aplicado a 305 exemplos brutos → 300 após deduplicação → 200 finais (120 Auto, 80 Saúde Empresarial). Diversidade efetiva de fontes melhora (Auto: 5,516 → 5,723; Saúde: 4,140 → 4,706).
+- **Reavaliação com Decision Framework:** Saúde Empresarial, reprovado no módulo 1 por insuficiência de dados (score 0,35), é reavaliado 9 meses depois. Score sobe para 0,62 (acima do limiar 0,6), volume mensal cresce de 1.200 para 1.862 casos. O mesmo framework que reprovou agora aprova, sem alterar a régua.
+- **Upload Versionado:** Cada versão de dataset mantém seu próprio caminho no bucket. Não se sobrescreve silenciosamente o arquivo anterior. Um job que falha ou produz resultado inesperado precisa continuar apontando para exatamente os dados usados naquele treinamento.
+- **Estados do Job:** Pending (fila, aguardando recursos), Running (treinamento em execução), Succeeded (concluído com sucesso), Failed (falha com possível causa: formato inválido, cota excedida, hiperparâmetro rejeitado).
+- **Hiperparâmetros:** Epoch count (número de passagens pelo dataset), Learning rate multiplier (intensidade do ajuste sobre taxa base interna), Adapter size (capacidade da camada adaptativa). Valores usados: 3 épocas, multiplicador 5, adapter size 4.
+- **Validação de Hiperparâmetros:** Primeira camada - validação local antes da chamada de rede (epoch count entre 1-20, learning rate multiplier entre 0,1-10). Segunda camada - comparação entre valores solicitados e efetivamente aplicados pelo provedor.
+- **Automação Segura:** Cinco passos encadeados (converter, validar, upload, criar job, acompanhar). Fail fast: falha em uma etapa interrompe o fluxo antes de criar recursos. Confirmação explícita antes da criação do job (ação cobrável). Idempotência parcial: upload é idempotente; criação de job não é.
+- **Polling com Backoff Exponencial:** Primeira consulta imediata; intervalos crescem por fator 1,5 até teto de 60 segundos. Callback para tornar o acompanhamento observável (Pending, Running, Succeeded). Injeção de dependência permite testar lógica assíncrona sem rede e sem espera real.
+- **Versionamento e Model Card:** Hash SHA-256 do conteúdo do dataset como identificador de versão (não apenas nome do arquivo). Model Card registra job, modelo ajustado, endpoint, modelo base, dataset e hash, hiperparâmetros aplicados, estatísticas, timestamps, custo estimado e custo real.
+- **Preference Tuning:** Alternativa ao Supervised Fine-Tuning. Em vez de uma resposta correta, fornece par preferido/rejeitado. Relacionado a DPO (Direct Preference Optimization). Mais adequado quando qualidade é subjetiva (tom, voz de marca, linguagem de compliance) e existe mais de uma resposta plausível.
+
+**Aplicação prática:**
+No contexto da Amplitude Seguros, o dataset de 200 exemplos (120 Auto, 80 Saúde Empresarial) é convertido para o formato do Vertex AI, validado (13 testes automatizados), e enviado para um bucket no Google Cloud Storage. O job é configurado com Gemini 2.5 Flash, 3 épocas, learning rate multiplier 5, adapter size 4. A validação local bloqueia epoch count zero antes da chamada de rede (após um incidente real onde a API aceitou o valor inválido e iniciou treinamento). A comparação entre pedido e aplicado confirma os valores. O job real leva aproximadamente 45 minutos e 42 segundos, processa 27.353 tokens, custa entre R$2,39 (billing real) e aproximadamente 5-11 centavos de dólar (estimativa). O endpoint publicado é versionado com hash SHA-256 do dataset e documentado em um Model Card que registra toda a linhagem. O teste com Preference Tuning usa 40 exemplos e leva 17 minutos e 32 segundos, publicando modelo ajustado e endpoint. O pipeline completo é automatizado em JavaScript e Python, com 18 testes cobrindo conversão, validação, upload, criação protegida por confirmação, backoff e loop assíncrono com injeção de dependência.
+
+**Comandos executados:**
+```bash
+cd module-03
+node dataset-upload-and-tracking-tool.js
+node m3-dataset-scaling-tool.js
+node hyperparameter-and-monitoring-tool.js
+node finetuning-automation-tool.js
+node model-versioning-tool.js
+```
