@@ -21,7 +21,7 @@ const assert = require('assert').strict;
 const path = require('path');
 
 const m22 = require(
-  path.join(__dirname, '..', 'modulo-02-preparacao-datasets', 'dataset-cleaning-balancing-tool.js')
+  path.join(__dirname, '..', 'module-02', 'dataset-cleaning-balancing-tool.js')
 );
 
 /* --------------------------------------------------------------------------

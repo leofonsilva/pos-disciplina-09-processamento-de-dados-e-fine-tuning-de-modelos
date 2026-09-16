@@ -35,7 +35,7 @@ const {
   RECOMENDACAO,
   PERGUNTAS,
   CHAVES_PERGUNTAS,
-} = require(path.join(__dirname, '..', 'modulo-01-decision-framework', 'decision-framework-tool.js'));
+} = require(path.join(__dirname, '..', 'module-01', 'decision-framework-tool.js'));
 
 const MESES_DECORRIDOS = 9;
 
