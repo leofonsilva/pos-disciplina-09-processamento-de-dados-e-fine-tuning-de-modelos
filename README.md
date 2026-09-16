@@ -116,3 +116,72 @@ node hyperparameter-and-monitoring-tool.js
 node finetuning-automation-tool.js
 node model-versioning-tool.js
 ```
+
+### Módulo 04: LORA e PEFT (conceitos práticos)
+
+#### **Projeto:** [Amplitude Seguros - LoRA Local](module-04)
+
+**Tecnologias utilizadas:**
+- **LoRA (Low-Rank Adaptation)** - Técnica de fine-tuning eficiente que congela pesos originais e treina matrizes menores
+- **PEFT (Parameter Efficient Fine-Tuning)** - Família de técnicas de ajuste eficiente de parâmetros
+- **MLX-LM** - Framework de treinamento local para Apple Silicon
+- **QLoRA** - LoRA combinado com quantização do modelo base em 4 bits
+- **DoRA** - Variação da técnica LoRA que decompõe atualização em magnitude e direção
+- **Validation Loss** - Métrica de erro em conjunto de validação
+- **NPV (Net Present Value)** - Análise financeira para decisão de custo
+
+**Conceitos abordados:**
+- **LoRA (Low-Rank Adaptation):** Congela os pesos originais do modelo e treina apenas pequenas matrizes adicionais (A e B). Reduz drasticamente parâmetros treináveis, memória e tamanho do checkpoint. A atualização é representada por duas matrizes menores com posto R.
+- **Custo Fixo vs. Custo Marginal:** Em operações de baixo volume, o custo fixo de GPU alugada pode inviabilizar o projeto. LoRA local transforma o custo fixo em custo marginal próximo de zero (se o hardware já existe).
+- **Matemática do LoRA:** Exemplo: matriz 1000x1000 (1M parâmetros) → duas matrizes de 1000x4 e 4x1000 (8K parâmetros, <1% do original). A matriz original permanece congelada; apenas A e B recebem gradiente.
+- **Famílias PEFT:**
+  - **Métodos de Adição:** Adapters (módulos bottleneck inseridos entre camadas).
+  - **Métodos Seletivos:** BitFit (treina apenas termos de viés).
+  - **Soft Prompts:** Prefix Tuning e Prompt Tuning (vetores contínuos aprendidos).
+  - **Reparametrização:** LoRA.
+- **Vantagens do LoRA:** Não consome janela de contexto (como soft prompts) nem adiciona latência de inferência (como adapters). Após o merge, a contribuição é incorporada à matriz original.
+- **QLoRA:** Combina LoRA com quantização do modelo base em 4 bits, reduzindo memória em ~61% com pequena perda de qualidade (~4% no validation loss).
+- **DoRA:** Variação que decompõe a atualização em magnitude e direção. No experimento, não mostrou ganho relevante para a tarefa simples de extração estruturada.
+- **Rank e Scale:** Rank controla a capacidade do adaptador (dimensão interna das matrizes); scale controla a intensidade da contribuição (alfa/R).
+- **Retorno Decrescente:** Aumentar o rank dobra os parâmetros treináveis, mas o ganho em validation loss diminui. Rank 4→8 melhora ~28%; rank 8→16 melhora ~19%.
+- **Full Fine-Tuning vs. LoRA:** Full treina todos os pesos das camadas selecionadas (ex: 22,5% do modelo), enquanto LoRA treina apenas 0,147% (rank 8). Full tem melhor validation loss (~31% de ganho vs. rank 8; ~15,6% vs. rank 16), mas consome mais memória (~42% mais), gera checkpoints muito maiores (~73,8x maior) e tem maior risco de esquecimento catastrófico.
+- **Esquecimento Catastrófico:** Full Fine-Tuning pode degradar capacidades gerais do modelo, enquanto LoRA preserva melhor o conhecimento original.
+- **Merge do Adaptador:** A contribuição de B vezes A pode ser somada à matriz W original, formando uma única matriz. Em produção, o servidor não precisa executar as duas matrizes extras separadamente, eliminando custo adicional de inferência.
+
+**Aplicação prática:**
+No contexto da Amplitude Seguros, a expansão para parcerias regionais de baixo volume (400 documentos/mês) torna o custo fixo de GPU alugada (R$2.400/treinamento) inviável (NPV negativo, break-even não atingido). Com LoRA local, o mesmo caso passa a ter NPV positivo (~R$359) e break-even no primeiro mês. O treinamento local com MLX-LM em Apple M5 Pro (24GB) usa o mesmo dataset de 200 exemplos (120 Auto, 80 Saúde Empresarial), com 20 iterações, batch size 1 e learning rate 1e-5. O validation loss cai de 4,752 (iteração 1) para 0,895 (iteração 20). O modelo base (Gemma, ~4,63B parâmetros) tem 6,8M parâmetros treináveis (0,147%). O adaptador final ocupa apenas 27 MB vs. ~10,24 GB do modelo base. A comparação de ranks mostra: rank 4 (3,4M params, 13MB, loss 1,246), rank 8 (6,8M params, 27MB, loss 0,895), rank 16 (13,6M params, 52MB, loss 0,725). QLoRA reduz memória de 10,83GB para 4,19GB (rank 8), com loss de 0,932. Full Fine-Tuning (22,5% dos parâmetros) atinge loss 0,612, mas com memória de 15,34GB e checkpoint de ~2GB. Os testes comportamentais mostram que LoRA e Full acertam os mesmos exemplos, tornando o ganho do Full não justificável para esta tarefa específica. O adaptador LoRA rank 8 é o artefato final escolhido para produção.
+
+**Arquitetura:**
+```
+Dataset Preparado (200 exemplos)
+    ↓
+Conversão para formato MLX-LM
+    ↓
+Validação de Hiperparâmetros
+    ↓
+Treinamento LoRA Local (MLX-LM)
+    ├─ Modelo base congelado (Gemma ~4,63B)
+    ├─ Adaptador LoRA (rank 8, ~6,8M params)
+    ├─ 20 iterações, batch 1, lr 1e-5
+    └─ Validation loss: 4,752 → 0,895
+    ↓
+Adaptador LoRA (27 MB)
+    ↓
+Teste Comportamental (modelo base vs. modelo + adaptador)
+    ↓
+Decisão: LoRA rank 8 vs. Full Fine-Tuning
+    ↓
+Adaptador Final para Produção
+```
+
+**Comandos executados:**
+```bash
+cd module-04
+node regional-lora-vs-cloud-npv.js
+node local-lora-training-tool.js
+python3 -m mlx_lm lora (TODO: comando incompleto, aula 02, módulo 04, 00:10:00)
+node lora-rank-tradeoff-tool.js
+node full-vs-lora-tradeoff-tool.js
+python3 -m mlx_lm lora (TODO: comando incompleto, aula 04, módulo 04, 00:13:00)
+python3 -m mlx_lm lora (TODO: comando incompleto, aula 04, módulo 04, 00:13:10)
+```
