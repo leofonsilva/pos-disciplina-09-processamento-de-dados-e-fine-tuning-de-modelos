@@ -185,3 +185,80 @@ node full-vs-lora-tradeoff-tool.js
 python3 -m mlx_lm lora (TODO: comando incompleto, aula 04, módulo 04, 00:13:00)
 python3 -m mlx_lm lora (TODO: comando incompleto, aula 04, módulo 04, 00:13:10)
 ```
+
+### Módulo 05: Avaliar Modelos Fine-Tunados
+
+#### **Projeto:** [Amplitude Seguros - Evaluation Harness](module-05)
+
+**Tecnologias utilizadas:**
+- **Evaluation Harness** - Estrutura automatizada de testes para modelos
+- **Teste Retido (Holdout)** - Conjunto de dados nunca visto durante treino/validação
+- **Precisão por Campo** - Métrica de acurácia em extração estruturada
+- **Bootstrap** - Técnica de reamostragem para estimar intervalo de confiança
+- **LLM-as-a-Judge** - Avaliação por modelo juiz para tarefas subjetivas
+- **Behavioral Testing** - Testes de invariância e variações estruturais
+- **Checklist de Graduação** - Critérios explícitos para decisão de escala
+
+**Conceitos abordados:**
+- **Validation Loss vs. Teste Retido:** Validation loss ajuda a selecionar configurações, mas é reutilizado para decisões. O teste retido é necessário para medir generalização após as escolhas terem sido feitas.
+- **Papéis dos Conjuntos:** Treino (ajusta o modelo), Validação (compara configurações), Teste (mede generalização em dados retidos).
+- **Três Métricas de Avaliação:**
+  - **Precisão por Campo:** Compara campo a campo com o resultado esperado (objetivo, contável, reprodutível).
+  - **Consistência:** Envia o mesmo exemplo múltiplas vezes e verifica se as respostas são idênticas.
+  - **Adequação de Esquema:** Verifica se a saída é JSON válido com os campos exatos esperados.
+- **Evaluation Harness:** Estrutura automatizada que executa sempre os mesmos testes, com os mesmos critérios, contra o modelo avaliado. Inspirado no LM Evaluation Harness da EleutherAI.
+- **Baseline:** Comparação necessária para responder se o fine-tuning realmente trouxe ganho. Teste A-B entre fine-tunado e modelo genérico, com mesmo conjunto, mesmo prompt e mesmas métricas.
+- **Hint de Formato:** Instrução explícita para o modelo genérico responder em JSON. Melhora o esquema, mas não elimina a diferença de precisão de conteúdo (genérico com hint: ~61,8% vs. fine-tunado: 100%).
+- **Bootstrap:** Reamostragem com reposição para estimar a estabilidade da vantagem observada. Intervalo de confiança de 95% para a diferença de precisão: [24,2; 51,5] pontos percentuais.
+- **LLM-as-a-Judge:** Avaliação por modelo juiz para tarefas subjetivas (pareceres, resumos, tom). Requer rubrica, controle de viés de posição e self-preference bias.
+- **Behavioral Testing e Testes de Invariância:** Variações que não deveriam alterar a resposta correta (formato, rótulos, ordem) para testar robustez.
+- **Artefatos de Medição:** Quando o harness penaliza diferenças irrelevantes (ex: capitalização), o resultado é um falso erro. A causa raiz precisa ser investigada antes de concluir que o modelo falhou.
+- **Stress Tests:** Round 1 (variação de formato, linguagem coloquial, entidades conflitantes) e Round 2 (variação estrutural, mensagem informal, valor por extenso, duas entidades).
+- **Checklist de Graduação:** Cinco critérios com limiares definidos antes de ver o resultado: precisão em dados nunca vistos (≥95%), robustez a variações de formato (≥95%), superioridade ao baseline genérico, superioridade/empate aos modelos separados, robustez a variações estruturais (≥90%).
+- **Escopo da Evidência:** Resultados de 100% em tarefa estreita de extração não se transferem para tarefas abertas (atendimento ao cliente continua reprovado).
+- **Treinamento Conjunto vs. Separado:** O modelo multidomínio (Auto + Saúde no mesmo job) empatou ou superou os modelos treinados separadamente. O volume total de 200 exemplos fortaleceu o contrato de saída.
+
+**Aplicação prática:**
+No contexto da Amplitude Seguros, o conjunto de teste retido é construído com 11 exemplos (6 Auto, 5 Saúde) usando o mesmo gerador determinístico, mas com índices 5000+ (nunca usados no treino). O harness avalia precisão por campo, consistência (3 chamadas) e adequação de esquema. Resultados: modelo Vertex AI (200 exemplos) → 100% esquema, 100% precisão, consistência total; modelo genérico sem hint → 0% esquema; modelo genérico com hint → 54,5%-72,7% precisão (média 61,8%); LoRA local (rank 8) → 100% esquema, 100% precisão. O teste A-B mostra vantagem do fine-tunado mesmo com hint. Bootstrap confirma intervalo de confiança positivo. Stress tests: Round 1 (variação de formato) → 100% após correção de artefato de medição; Round 2 (variação estrutural) → 100%. Sonda de capacidade geral (Round 0) mostra que conteúdo permanece, mas formato JSON se espalha. Checklist de graduação: Auto e Saúde aprovados (5/5), Atendimento ao Cliente reprovado (tarefa aberta e instável). Comparação LoRA local vs. Vertex AI: ambos atingem 100% precisão no mesmo conjunto retido, confirmando robustez independente do caminho de treinamento. O gate original é reaberto com dados reais: Auto e Saúde escalam; Atendimento ao Cliente permanece fora do escopo de fine-tuning.
+
+**Arquitetura:**
+```
+Dataset de Teste Retido (11 exemplos, índices 5000+)
+    ↓
+Evaluation Harness (Python/JavaScript)
+    ├─ Adequação de Esquema (JSON válido, campos exatos)
+    ├─ Precisão por Campo (comparação campo a campo)
+    └─ Consistência (múltiplas chamadas, mesmo resultado)
+    ↓
+Teste A-B: Fine-tunado vs. Genérico (mesmo prompt)
+    ↓
+Teste com Hint de Formato (genérico + instrução JSON)
+    ↓
+Bootstrap (intervalo de confiança)
+    ↓
+Stress Tests (Behavioral Testing)
+    ├─ Round 0: Sonda de Capacidade Geral (fora do domínio)
+    ├─ Round 1: Variação de Formato (rótulos, linguagem)
+    └─ Round 2: Variação Estrutural (mensagem, valor por extenso, 2 entidades)
+    ↓
+Checklist de Graduação (5 critérios, limiares pré-definidos)
+    ↓
+Reabertura do Gate do Módulo 1.3
+    ├─ Auto: Escalar (5/5 critérios)
+    ├─ Saúde Empresarial: Escalar (5/5 critérios)
+    └─ Atendimento ao Cliente: Fora do Escopo (tarefa aberta e instável)
+    ↓
+Comparação de Caminhos: Vertex AI vs. LoRA Local
+    └─ Ambos 100% precisão no mesmo teste retido
+    ↓
+Decisão Final: Escalar / Piloto / Fora do Escopo
+```
+
+**Comandos executados:**
+```bash
+cd module-05
+node model-evaluation-harness-tool.js
+node ab-and-domain-tradeoff-tool.js
+node overfitting-stress-test-tool.js [round0|round1|round2|round2-medir]
+node veredito-escala-tool.js
+```
