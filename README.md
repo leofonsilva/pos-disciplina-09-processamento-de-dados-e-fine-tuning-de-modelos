@@ -1,7 +1,9 @@
 # Pós Disciplina 09 - Processamento de Dados e Fine-Tuning de Modelos
 
 ## Introdução
-Pendente...
+Este repositório contém todos os projetos desenvolvidos durante a disciplina **Processamento de Dados e Fine-Tuning de Modelos**, abordando desde o framework de decisão sobre quando o fine-tuning realmente faz sentido até a construção de um protótipo funcional que integra o modelo customizado a um fluxo de uso real. 
+
+Cada módulo foi desenvolvido para demonstrar na prática como as ferramentas de IA transformam o ciclo de especialização de modelos, desde a análise multicritério com AHP, NPV e Monte Carlo até a preparação de datasets com OCR, deduplicação com MinHash e LSH, treinamento gerenciado via Vertex AI, ajuste eficiente com LoRA e QLoRA, avaliação rigorosa com testes de estresse e comparação contra baseline, culminando em um protótipo que orquestra classificação de domínio, roteamento entre modelo gerenciado e local, validação em duas camadas e documentação de decisões de arquitetura. O repositório explora desde o uso de LLMs para decisão de investimento em treinamento até a implementação de um fluxo completo de inferência com Python e MLX para o modelo local, utilizando JavaScript como linguagem principal da orquestração e Python para o treinamento e execução local dos modelos.
 
 ## Módulos
 
